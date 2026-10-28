@@ -1,0 +1,14 @@
+{
+  "name": "maclay-workspace",
+  "version": "1.0.0",
+  "description": "MAC'LAY Workspace — open-source online code editor with accounts, snippets and an owner dashboard",
+  "license": "MIT",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test/api.test.js"
+  }
+}
