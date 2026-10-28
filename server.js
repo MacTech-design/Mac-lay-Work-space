@@ -405,8 +405,8 @@ route('POST', '/api/auth/register', { limit: ['register', 8, 3600_000] }, async 
   checkPassword(body.password, email);
   if (q.userByEmail.get(email)) bad('That email is already registered. Try signing in.', 409);
   const pass_hash = await hashPassword(body.password);
-  // Auto-owner only outside production (local dev). In production use --make-owner.
-  const role = !CFG.production && CFG.ownerEmail && email === CFG.ownerEmail && q.ownerCount.get().c === 0 ? 'owner' : 'user';
+  // First sign-up with OWNER_EMAIL becomes owner while no owner exists (delete OWNER_EMAIL afterwards).
+  const role = CFG.ownerEmail && email === CFG.ownerEmail && q.ownerCount.get().c === 0 ? 'owner' : 'user';
   let id;
   try { id = Number(q.insertUser.run(email, name, pass_hash, role, now()).lastInsertRowid); }
   catch (_) { bad('That email is already registered. Try signing in.', 409); }
@@ -427,6 +427,10 @@ route('POST', '/api/auth/login', { limit: ['login', 20, 15 * 60_000] }, async ({
   if (row.status !== 'active') bad('This account has been suspended. Contact the site owner.', 403);
   if (getSite().maintenance && row.role !== 'owner') bad('The site is in maintenance mode. Please try again later.', 503);
   failures.delete(email);
+  // Claim ownership at sign-in too (password already verified): covers an account created before OWNER_EMAIL was set.
+  if (CFG.ownerEmail && email === CFG.ownerEmail && row.role !== 'owner' && q.ownerCount.get().c === 0) {
+    db.prepare("UPDATE users SET role = 'owner' WHERE id = ?").run(row.id);
+  }
   db.prepare('UPDATE users SET last_login = ? WHERE id = ?').run(now(), row.id);
   startSession(res, row.id);
   logEvent(req, 'login', { userId: row.id });
@@ -778,7 +782,7 @@ if (require.main === module) {
       console.log(`MAC'LAY is running at http://localhost:${CFG.port}`);
       if (!q.ownerCount.get().c) {
         console.log('No owner account yet: sign up on the site, then run:  node server.js --make-owner your@email');
-        if (!CFG.production && CFG.ownerEmail) console.log(`(Dev mode: signing up as ${CFG.ownerEmail} will make it the owner automatically.)`);
+        if (CFG.ownerEmail) console.log(`(Signing up as ${CFG.ownerEmail} will make it the owner while no owner exists. Remove OWNER_EMAIL afterwards.)`);
       }
       if (!CFG.production) console.log('Running in development mode. Set PRODUCTION=1 when serving over HTTPS.');
     });
